@@ -175,26 +175,38 @@ def extract_text_from_url(url):
         print(f"Error extracting text from URL: {e}")
         return None
 
-def generate_podcast_script(text):
+def generate_podcast_script(text, mode='full'):
     """Generate a podcast script from the given text using Google's Gemini AI."""
     if not text or not text.strip():
         print("Error: Empty or invalid text provided for script generation")
         return None
         
     try:
-        prompt_parts = [
-            "You are a professional podcast host. Transform the following research paper "
-            "into an engaging, conversational podcast script. The script should be "
-            "informative but accessible to a technical audience.\n\n"
-            "IMPORTANT: Structure your response exactly as follows with these section markers:\n"
-            "[INTRO]\n(Engaging introduction that hooks the listener)\n[/INTRO]\n\n"
-            "[BODY]\n(Key findings, methodology overview, results and implications - comprehensive content)\n[/BODY]\n\n"
-            "[CONCLUSION]\n(Thought-provoking conclusion and summary)\n[/CONCLUSION]\n\n"
-            "Make it sound natural and engaging, as if it's being presented by an expert host.\n\n"
-            f"Here's the research paper content:\n{text[:15000]}"
-        ]
+        if mode == 'summary':
+            prompt_parts = [
+                "You are a professional podcast host. Create a SHORT, CONCISE summary of the following research paper "
+                "as an engaging podcast segment. Focus ONLY on the key points.\n\n"
+                "Structure your response exactly as follows:\n"
+                "[INTRO]\n(Brief 2-3 sentence hook that captures attention)\n[/INTRO]\n\n"
+                "[BODY]\n(Key findings - 3-5 bullet points max, very concise)\n[/BODY]\n\n"
+                "[CONCLUSION]\n(One sentence takeaway message)\n[/CONCLUSION]\n\n"
+                "Keep it brief - under 500 words total.\n\n"
+                f"Here's the research paper content:\n{text[:15000]}"
+            ]
+        else:
+            prompt_parts = [
+                "You are a professional podcast host. Transform the following research paper "
+                "into an engaging, conversational podcast script. The script should be "
+                "informative but accessible to a technical audience.\n\n"
+                "IMPORTANT: Structure your response exactly as follows with these section markers:\n"
+                "[INTRO]\n(Engaging introduction that hooks the listener)\n[/INTRO]\n\n"
+                "[BODY]\n(Key findings, methodology overview, results and implications - comprehensive content)\n[/BODY]\n\n"
+                "[CONCLUSION]\n(Thought-provoking conclusion and summary)\n[/CONCLUSION]\n\n"
+                "Make it sound natural and engaging, as if it's being presented by an expert host.\n\n"
+                f"Here's the research paper content:\n{text[:15000]}"
+            ]
         
-        print("Sending request to Gemini API...")
+        print(f"Sending request to Gemini API... (mode: {mode})")
         
         max_retries = 3
         last_error = None
@@ -266,6 +278,7 @@ def generate_podcast():
             'body': 'en-US-terrell',
             'conclusion': 'en-US-julia'
         }
+        podcast_mode = 'full'
         
         # Case 1: Handle file upload
         if 'file' in request.files:
@@ -277,6 +290,10 @@ def generate_podcast():
             if request.form.get('voices'):
                 import json
                 voice_settings = json.loads(request.form.get('voices'))
+            
+            # Check for podcast mode in form data
+            if request.form.get('podcast_mode'):
+                podcast_mode = request.form.get('podcast_mode')
             
             if file and file.filename.lower().endswith('.pdf'):
                 # Save the uploaded file temporarily
@@ -303,6 +320,10 @@ def generate_podcast():
             if data.get('voices'):
                 voice_settings = data['voices']
             
+            # Get podcast mode if provided
+            if data.get('podcast_mode'):
+                podcast_mode = data['podcast_mode']
+            
             # Extract text from the URL
             paper_text = extract_text_from_url(url)
         
@@ -311,7 +332,7 @@ def generate_podcast():
             return jsonify({'error': 'Could not extract text from the source.'}), 400
             
         # Generate podcast script using Gemini
-        podcast_script = generate_podcast_script(paper_text)
+        podcast_script = generate_podcast_script(paper_text, mode=podcast_mode)
         if not podcast_script:
             return jsonify({'error': 'Failed to generate podcast script'}), 500
             
