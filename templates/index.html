@@ -69,6 +69,21 @@
                 </div>
             </div>
 
+            <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+                <label class="block text-gray-700 font-medium mb-2">Podcast Mode:</label>
+                <div class="flex items-center space-x-4">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="podcastMode" value="full" checked class="mr-2">
+                        <span class="text-gray-700">Full Script</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="podcastMode" value="summary" class="mr-2">
+                        <span class="text-gray-700">Summary Only (Condensed)</span>
+                    </label>
+                </div>
+                <p class="text-sm text-gray-500 mt-2">Summary mode creates a shorter, focused overview of the key points.</p>
+            </div>
+
             <button id="generateBtn" 
                     class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105">
                 Generate Podcast
@@ -153,6 +168,7 @@
         const voiceIntro = document.getElementById('voiceIntro');
         const voiceBody = document.getElementById('voiceBody');
         const voiceConclusion = document.getElementById('voiceConclusion');
+        const podcastModeInputs = document.getElementsByName('podcastMode');
 
         // Handle file selection
         fileInput.addEventListener('change', (e) => {
@@ -179,11 +195,26 @@
             try {
                 const formData = new FormData();
                 
+                // Get selected podcast mode
+                let podcastMode = 'full';
+                for (const rb of podcastModeInputs) {
+                    if (rb.checked) {
+                        podcastMode = rb.value;
+                        break;
+                    }
+                }
+                
                 let response;
                 
                 if (file) {
                     // Handle file upload
                     formData.append('file', file);
+                    formData.append('podcast_mode', podcastMode);
+                    formData.append('voices', JSON.stringify({
+                        intro: voiceIntro.value,
+                        body: voiceBody.value,
+                        conclusion: voiceConclusion.value
+                    }));
                     
                     response = await fetch('/generate', {
                         method: 'POST',
@@ -203,7 +234,8 @@
                         },
                         body: JSON.stringify({
                             source: source,
-                            voices: voiceSettings
+                            voices: voiceSettings,
+                            podcast_mode: podcastMode
                         })
                     });
                 }
