@@ -36,6 +36,39 @@
                 <p id="fileName" class="text-sm text-gray-500 mt-2"></p>
             </div>
 
+            <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+                <label class="block text-gray-700 font-medium mb-3">Voice Selection (Multi-Voice):</label>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="voiceIntro" class="block text-sm text-gray-600 mb-1">Intro Voice:</label>
+                        <select id="voiceIntro" class="w-full p-2 border border-gray-300 rounded-lg">
+                            <option value="en-US-julia" selected>Julia (Female)</option>
+                            <option value="en-US-terrell">Terrell (Male)</option>
+                            <option value="en-US-michelle">Michelle (Female)</option>
+                            <option value="en-US-joshua">Joshua (Male)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="voiceBody" class="block text-sm text-gray-600 mb-1">Body Voice:</label>
+                        <select id="voiceBody" class="w-full p-2 border border-gray-300 rounded-lg">
+                            <option value="en-US-julia">Julia (Female)</option>
+                            <option value="en-US-terrell" selected>Terrell (Male)</option>
+                            <option value="en-US-michelle">Michelle (Female)</option>
+                            <option value="en-US-joshua">Joshua (Male)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="voiceConclusion" class="block text-sm text-gray-600 mb-1">Conclusion Voice:</label>
+                        <select id="voiceConclusion" class="w-full p-2 border border-gray-300 rounded-lg">
+                            <option value="en-US-julia" selected>Julia (Female)</option>
+                            <option value="en-US-terrell">Terrell (Male)</option>
+                            <option value="en-US-michelle">Michelle (Female)</option>
+                            <option value="en-US-joshua">Joshua (Male)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
             <button id="generateBtn" 
                     class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105">
                 Generate Podcast
@@ -117,6 +150,9 @@
         const fileInput = document.getElementById('fileInput');
         const fileName = document.getElementById('fileName');
         const newPodcastBtn = document.getElementById('newPodcast');
+        const voiceIntro = document.getElementById('voiceIntro');
+        const voiceBody = document.getElementById('voiceBody');
+        const voiceConclusion = document.getElementById('voiceConclusion');
 
         // Handle file selection
         fileInput.addEventListener('change', (e) => {
@@ -155,13 +191,19 @@
                     });
                 } else {
                     // Handle URL input
+                    const voiceSettings = {
+                        intro: voiceIntro.value,
+                        body: voiceBody.value,
+                        conclusion: voiceConclusion.value
+                    };
                     response = await fetch('/generate', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            source: source
+                            source: source,
+                            voices: voiceSettings
                         })
                     });
                 }

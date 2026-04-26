@@ -79,6 +79,45 @@ safety_settings = [
 
 model = genai.GenerativeModel('gemini-1.5-flash', safety_settings=safety_settings)
 
+def parse_script_sections(script_text):
+    """Parse the script into intro, body, and conclusion sections."""
+    sections = {
+        'intro': '',
+        'body': '',
+        'conclusion': ''
+    }
+    
+    if not script_text:
+        return sections
+    
+    import re
+    
+    intro_match = re.search(r'\[INTRO\](.*?)\[/INTRO\]', script_text, re.DOTALL | re.IGNORECASE)
+    body_match = re.search(r'\[BODY\](.*?)\[/BODY\]', script_text, re.DOTALL | re.IGNORECASE)
+    conclusion_match = re.search(r'\[CONCLUSION\](.*?)\[/CONCLUSION\]', script_text, re.DOTALL | re.IGNORECASE)
+    
+    if intro_match:
+        sections['intro'] = intro_match.group(1).strip()
+    if body_match:
+        sections['body'] = body_match.group(1).strip()
+    if conclusion_match:
+        sections['conclusion'] = conclusion_match.group(1).strip()
+    
+    if not any(sections.values()):
+        parts = script_text.split('\n\n')
+        if len(parts) >= 3:
+            sections['intro'] = parts[0]
+            sections['body'] = '\n\n'.join(parts[1:-1])
+            sections['conclusion'] = parts[-1]
+        elif len(parts) == 2:
+            sections['intro'] = parts[0]
+            sections['body'] = parts[1]
+            sections['conclusion'] = parts[1]
+        else:
+            sections['body'] = script_text
+    
+    return sections
+
 def extract_text_from_pdf(pdf_path):
     """Extract text from a PDF file."""
     try:
@@ -143,24 +182,20 @@ def generate_podcast_script(text):
         return None
         
     try:
-        # Prepare the prompt with clear instructions
         prompt_parts = [
             "You are a professional podcast host. Transform the following research paper "
             "into an engaging, conversational podcast script. The script should be "
             "informative but accessible to a technical audience.\n\n"
-            "Structure your response with these sections:\n"
-            "1. [Engaging introduction that hooks the listener]\n"
-            "2. [Key findings and their significance]\n"
-            "3. [Methodology overview - simplified]\n"
-            "4. [Results and their implications]\n"
-            "5. [Thought-provoking conclusion]\n\n"
+            "IMPORTANT: Structure your response exactly as follows with these section markers:\n"
+            "[INTRO]\n(Engaging introduction that hooks the listener)\n[/INTRO]\n\n"
+            "[BODY]\n(Key findings, methodology overview, results and implications - comprehensive content)\n[/BODY]\n\n"
+            "[CONCLUSION]\n(Thought-provoking conclusion and summary)\n[/CONCLUSION]\n\n"
             "Make it sound natural and engaging, as if it's being presented by an expert host.\n\n"
-            f"Here's the research paper content:\n{text[:15000]}"  # Limit context length
+            f"Here's the research paper content:\n{text[:15000]}"
         ]
         
         print("Sending request to Gemini API...")
         
-        # Generate content using the model with retry logic
         max_retries = 3
         last_error = None
         
@@ -169,36 +204,25 @@ def generate_podcast_script(text):
                 print(f"Attempt {attempt + 1} of {max_retries}")
                 response = model.generate_content(prompt_parts)
                 
-                # Debug: Print the raw response
-                print(f"Raw response type: {type(response)}")
-                print(f"Response attributes: {dir(response)}")
-                
-                # Handle different response formats
                 if hasattr(response, 'text'):
-                    print("Found response.text")
                     return response.text
                     
                 if hasattr(response, 'parts'):
-                    print("Found response.parts")
                     parts_text = [part.text for part in response.parts if hasattr(part, 'text')]
                     if parts_text:
                         return ' '.join(parts_text)
                         
                 if hasattr(response, 'candidates'):
-                    print(f"Found {len(response.candidates)} candidates")
-                    for i, candidate in enumerate(response.candidates):
-                        print(f"  Candidate {i} type: {type(candidate)}")
+                    for candidate in response.candidates:
                         if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
                             parts = [p.text for p in candidate.content.parts if hasattr(p, 'text')]
                             if parts:
                                 return ' '.join(parts)
                 
-                # If we get here, log the unexpected response
                 print(f"Unexpected response format on attempt {attempt + 1}")
-                print(f"Response: {response}")
                 
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt  # Exponential backoff
+                    wait_time = 2 ** attempt
                     print(f"Retrying in {wait_time} seconds...")
                     import time
                     time.sleep(wait_time)
@@ -206,16 +230,11 @@ def generate_podcast_script(text):
             except Exception as e:
                 last_error = e
                 print(f"Attempt {attempt + 1} failed: {str(e)}")
-                print(f"Error type: {type(e).__name__}")
-                
-                if hasattr(e, 'response') and hasattr(e.response, 'text'):
-                    print(f"API Error response: {e.response.text}")
                 
                 if attempt == max_retries - 1:
-                    print("All attempts failed")
                     break
                     
-                wait_time = 2 ** attempt  # Exponential backoff
+                wait_time = 2 ** attempt
                 print(f"Retrying in {wait_time} seconds...")
                 import time
                 time.sleep(wait_time)
@@ -242,12 +261,22 @@ def generate_podcast():
     """Handle podcast generation from a research paper URL or uploaded PDF."""
     try:
         paper_text = None
+        voice_settings = {
+            'intro': 'en-US-julia',
+            'body': 'en-US-terrell',
+            'conclusion': 'en-US-julia'
+        }
         
         # Case 1: Handle file upload
         if 'file' in request.files:
             file = request.files['file']
             if file.filename == '':
                 return jsonify({'error': 'No selected file'}), 400
+            
+            # Check for voice settings in form data
+            if request.form.get('voices'):
+                import json
+                voice_settings = json.loads(request.form.get('voices'))
             
             if file and file.filename.lower().endswith('.pdf'):
                 # Save the uploaded file temporarily
@@ -269,6 +298,10 @@ def generate_podcast():
             url = data.get('source')
             if not url:
                 return jsonify({'error': 'No URL provided'}), 400
+            
+            # Get voice settings if provided
+            if data.get('voices'):
+                voice_settings = data['voices']
             
             # Extract text from the URL
             paper_text = extract_text_from_url(url)
@@ -292,7 +325,7 @@ def generate_podcast():
         
         audio_url = None
         
-        # Convert script to speech using Murf.ai
+        # Convert script to speech using Murf.ai with multi-voice support
         if not murf_client:
             return jsonify({
                 'status': 'success',
@@ -302,50 +335,59 @@ def generate_podcast():
             })
         
         try:
+            # Parse script into sections
+            sections = parse_script_sections(podcast_script)
+            
             # Generate a unique filename for the audio
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             audio_filename = f"podcast_{timestamp}.mp3"
             audio_path = os.path.join(app.config['AUDIO_FOLDER'], audio_filename)
             
-            # Split the script into chunks to handle long texts
-            max_chunk_length = 3000  # Characters per chunk
-            chunks = [podcast_script[i:i+max_chunk_length] 
-                     for i in range(0, len(podcast_script), max_chunk_length)]
+            # Process each section with corresponding voice
+            section_voices = [
+                ('intro', sections['intro'], voice_settings.get('intro', 'en-US-julia')),
+                ('body', sections['body'], voice_settings.get('body', 'en-US-terrell')),
+                ('conclusion', sections['conclusion'], voice_settings.get('conclusion', 'en-US-julia'))
+            ]
             
             all_audio_data = bytearray()
             
-            # Process each chunk
-            for i, chunk in enumerate(chunks):
-                print(f"[INFO] Processing audio chunk {i+1}/{len(chunks)} (length: {len(chunk)} chars)")
+            for section_name, section_text, voice_id in section_voices:
+                if not section_text:
+                    continue
+                    
+                print(f"[INFO] Processing {section_name} section with voice {voice_id}")
                 
-                client = Murf(api_key=murf_client.api_key)
-                # Call Murf.ai to generate speech for this chunk
-                response = client.text_to_speech.generate(
-                    text=chunk,
-                    voice_id="en-US-julia",
-                    format="MP3",
-                    channel_type="STEREO",
-                    sample_rate=44100
-                )
+                # Split long sections into chunks
+                max_chunk_length = 3000
+                chunks = [section_text[i:i+max_chunk_length] 
+                        for i in range(0, len(section_text), max_chunk_length)]
                 
-                if response and hasattr(response, 'audio_file') and response.audio_file:
-                    # The response.audio_file is a URL to the generated audio
-                    audio_url = response.audio_file
-                    print(f"[INFO] Downloading audio from URL: {audio_url}")
-                    audio_response = requests.get(audio_url)
-                    if audio_response.status_code == 200:
-                        all_audio_data.extend(audio_response.content)
-                    else:
-                        print(f"[WARNING] Failed to download audio from {audio_url}. Status: {audio_response.status_code}")
-                else:
-                    print(f"[WARNING] Failed to generate audio for chunk {i+1}. Response: {response}")
+                for chunk_idx, chunk in enumerate(chunks):
+                    client = Murf(api_key=murf_client.api_key)
+                    response = client.text_to_speech.generate(
+                        text=chunk,
+                        voice_id=voice_id,
+                        format="MP3",
+                        channel_type="STEREO",
+                        sample_rate=44100
+                    )
+                    
+                    if response and hasattr(response, 'audio_file') and response.audio_file:
+                        audio_url = response.audio_file
+                        print(f"[INFO] Downloading {section_name} chunk audio from URL: {audio_url}")
+                        audio_response = requests.get(audio_url)
+                        if audio_response.status_code == 200:
+                            all_audio_data.extend(audio_response.content)
+                        else:
+                            print(f"[WARNING] Failed to download {section_name} chunk audio")
             
             if not all_audio_data:
                 return jsonify({
                     'status': 'success',
                     'script': podcast_script,
                     'audio_url': None,
-                    'warning': 'Failed to generate audio. The text might be too long or contain unsupported characters.'
+                    'warning': 'Failed to generate audio'
                 })
             
             # Save the combined audio file
@@ -353,13 +395,12 @@ def generate_podcast():
                 f.write(all_audio_data)
             
             audio_url = f"/static/audio/{audio_filename}"
-            print(f"[INFO] Successfully saved audio to {audio_path} (size: {len(all_audio_data)} bytes)")
+            print(f"[INFO] Successfully saved audio to {audio_path}")
             
         except Exception as e:
             print(f"[ERROR] Error generating audio: {str(e)}")
             import traceback
             traceback.print_exc()
-            # Continue without audio if there's an error
         
         return jsonify({
             'status': 'success',
