@@ -71,17 +71,51 @@
 
             <div class="mb-6 p-4 bg-gray-50 rounded-lg">
                 <label class="block text-gray-700 font-medium mb-2">Podcast Mode:</label>
-                <div class="flex items-center space-x-4">
+                <div class="flex flex-wrap items-center gap-4">
                     <label class="flex items-center cursor-pointer">
                         <input type="radio" name="podcastMode" value="full" checked class="mr-2">
                         <span class="text-gray-700">Full Script</span>
                     </label>
                     <label class="flex items-center cursor-pointer">
                         <input type="radio" name="podcastMode" value="summary" class="mr-2">
-                        <span class="text-gray-700">Summary Only (Condensed)</span>
+                        <span class="text-gray-700">Summary Only</span>
                     </label>
                 </div>
-                <p class="text-sm text-gray-500 mt-2">Summary mode creates a shorter, focused overview of the key points.</p>
+                <p class="text-sm text-gray-500 mt-2">Summary mode creates a shorter, focused overview.</p>
+            </div>
+
+            <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+                <label class="block text-gray-700 font-medium mb-2">Podcast Style:</label>
+                <div class="flex flex-wrap items-center gap-4">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="podcastStyle" value="conversational" checked class="mr-2">
+                        <span class="text-gray-700">Conversational</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="podcastStyle" value="news" class="mr-2">
+                        <span class="text-gray-700">News Readout</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="podcastStyle" value="casual" class="mr-2">
+                        <span class="text-gray-700">Casual Chat</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="podcastStyle" value="debate" class="mr-2">
+                        <span class="text-gray-700">Debate Format</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+                <label class="block text-gray-700 font-medium mb-2">Batch Processing:</label>
+                <div>
+                    <input type="file" id="batchFiles" accept=".pdf" multiple class="hidden">
+                    <button onclick="document.getElementById('batchFiles').click()" 
+                            class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition">
+                        Select Multiple PDFs
+                    </button>
+                    <p id="batchFileCount" class="text-sm text-gray-500 mt-2"></p>
+                </div>
             </div>
 
             <button id="generateBtn" 
@@ -104,9 +138,22 @@
             <div id="audioPlayer" class="mt-6">
                 <h3 class="text-xl font-semibold mb-4">Listen to the Podcast</h3>
                 <div id="audioContainer" class="bg-gray-50 p-4 rounded-lg">
-                    <audio id="podcastAudio" controls class="w-full" style="min-width: 300px;">
-                        Your browser does not support the audio element.
-                    </audio>
+                    <div class="flex items-center gap-4 mb-3">
+                        <audio id="podcastAudio" controls class="flex-grow" style="min-width: 250px;">
+                            Your browser does not support the audio element.
+                        </audio>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-gray-600">Speed:</span>
+                            <select id="playbackSpeed" class="p-1 border rounded text-sm">
+                                <option value="0.5">0.5x</option>
+                                <option value="0.75">0.75x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.25">1.25x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="2">2x</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="mt-2 flex justify-between items-center text-sm text-gray-500">
                         <span id="audioDuration">00:00</span>
                         <a id="downloadAudio" href="#" class="text-blue-600 hover:text-blue-800">
@@ -117,6 +164,11 @@
                 <div id="audioError" class="hidden mt-2 text-red-500 text-sm">
                     There was an error generating the audio. Please try again.
                 </div>
+            </div>
+
+            <div id="batchResults" class="hidden mt-6">
+                <h3 class="text-xl font-semibold mb-4">Batch Processing Results</h3>
+                <div id="batchList" class="space-y-3"></div>
             </div>
 
             <div class="mt-8 pt-6 border-t border-gray-200">
@@ -169,12 +221,34 @@
         const voiceBody = document.getElementById('voiceBody');
         const voiceConclusion = document.getElementById('voiceConclusion');
         const podcastModeInputs = document.getElementsByName('podcastMode');
+        const podcastStyleInputs = document.getElementsByName('podcastStyle');
+        const batchFilesInput = document.getElementById('batchFiles');
+        const batchFileCount = document.getElementById('batchFileCount');
+        const playbackSpeed = document.getElementById('playbackSpeed');
+
+        // Handle playback speed change
+        playbackSpeed.addEventListener('change', (e) => {
+            const audioPlayer = document.getElementById('podcastAudio');
+            audioPlayer.playbackRate = parseFloat(e.target.value);
+        });
 
         // Handle file selection
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 fileName.textContent = `Selected: ${e.target.files[0].name}`;
                 sourceInput.value = ''; // Clear URL input
+                batchFilesInput.value = ''; // Clear batch
+                batchFileCount.textContent = '';
+            }
+        });
+
+        // Handle batch file selection
+        batchFilesInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                batchFileCount.textContent = `${e.target.files.length} files selected`;
+                sourceInput.value = ''; // Clear URL input
+                fileInput.value = ''; // Clear single file
+                fileName.textContent = '';
             }
         });
 
@@ -182,9 +256,10 @@
         generateBtn.addEventListener('click', async () => {
             const source = sourceInput.value.trim();
             const file = fileInput.files[0];
+            const batchFiles = batchFilesInput.files;
             
-            if (!source && !file) {
-                alert('Please enter a URL or upload a PDF file');
+            if (!source && !file && batchFiles.length === 0) {
+                alert('Please enter a URL, upload a PDF, or select multiple PDFs');
                 return;
             }
 
@@ -193,8 +268,6 @@
             generateBtn.disabled = true;
             
             try {
-                const formData = new FormData();
-                
                 // Get selected podcast mode
                 let podcastMode = 'full';
                 for (const rb of podcastModeInputs) {
@@ -204,18 +277,81 @@
                     }
                 }
                 
+                // Get selected podcast style
+                let podcastStyle = 'conversational';
+                for (const rb of podcastStyleInputs) {
+                    if (rb.checked) {
+                        podcastStyle = rb.value;
+                        break;
+                    }
+                }
+                
                 let response;
                 
-                if (file) {
-                    // Handle file upload
-                    formData.append('file', file);
-                    formData.append('podcast_mode', podcastMode);
-                    formData.append('voices', JSON.stringify({
-                        intro: voiceIntro.value,
-                        body: voiceBody.value,
-                        conclusion: voiceConclusion.value
-                    }));
+                // Handle batch processing
+                if (batchFiles.length > 1) {
+                    document.getElementById('batchResults').classList.remove('hidden');
+                    const batchList = document.getElementById('batchList');
+                    batchList.innerHTML = '';
                     
+                    for (let i = 0; i < batchFiles.length; i++) {
+                        const formData = new FormData();
+                        formData.append('file', batchFiles[i]);
+                        formData.append('podcast_mode', podcastMode);
+                        formData.append('podcast_style', podcastStyle);
+                        formData.append('voices', JSON.stringify({
+                            intro: voiceIntro.value,
+                            body: voiceBody.value,
+                            conclusion: voiceConclusion.value
+                        }));
+                        
+                        // Show progress
+                        const progressDiv = document.createElement('div');
+                        progressDiv.className = 'bg-gray-50 p-3 rounded-lg';
+                        progressDiv.innerHTML = `<p class="text-sm font-medium">Processing ${batchFiles[i].name}... (${i+1}/${batchFiles.length})</p>`;
+                        batchList.appendChild(progressDiv);
+                        
+                        try {
+                            response = await fetch('/generate', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            const result = await response.json();
+                            
+                            progressDiv.innerHTML = `
+                                <p class="text-sm font-medium">${batchFiles[i].name}</p>
+                                <p class="text-xs text-gray-600 mt-1">${result.script ? result.script.substring(0, 100) + '...' : 'No script'}</p>
+                                ${result.audio_url ? `<audio controls class="w-full mt-2" style="height: 30px;"><source src="${result.audio_url}"></audio>` : ''}
+                            `;
+                        } catch (err) {
+                            progressDiv.innerHTML = `<p class="text-sm text-red-500">Error: ${err.message}</p>`;
+                        }
+                    }
+                    
+                    loading.classList.remove('active');
+                    generateBtn.disabled = false;
+                    result.classList.remove('hidden');
+                    result.scrollIntoView({ behavior: 'smooth' });
+                    return;
+                }
+                
+                // Single file or URL processing
+                const formData = new FormData();
+                
+                if (file) {
+                    formData.append('file', file);
+                }
+                
+                formData.append('podcast_mode', podcastMode);
+                formData.append('podcast_style', podcastStyle);
+                formData.append('voices', JSON.stringify({
+                    intro: voiceIntro.value,
+                    body: voiceBody.value,
+                    conclusion: voiceConclusion.value
+                }));
+                
+                if (file) {
                     response = await fetch('/generate', {
                         method: 'POST',
                         body: formData
@@ -235,7 +371,8 @@
                         body: JSON.stringify({
                             source: source,
                             voices: voiceSettings,
-                            podcast_mode: podcastMode
+                            podcast_mode: podcastMode,
+                            podcast_style: podcastStyle
                         })
                     });
                 }
@@ -284,6 +421,9 @@
             sourceInput.value = '';
             fileInput.value = '';
             fileName.textContent = '';
+            batchFilesInput.value = '';
+            batchFileCount.textContent = '';
+            document.getElementById('batchResults').classList.add('hidden');
             scriptEl.textContent = '';
             document.getElementById('podcastAudio').pause();
             document.getElementById('podcastAudio').src = '';

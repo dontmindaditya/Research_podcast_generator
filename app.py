@@ -175,38 +175,45 @@ def extract_text_from_url(url):
         print(f"Error extracting text from URL: {e}")
         return None
 
-def generate_podcast_script(text, mode='full'):
+def generate_podcast_script(text, mode='full', style='conversational'):
     """Generate a podcast script from the given text using Google's Gemini AI."""
     if not text or not text.strip():
         print("Error: Empty or invalid text provided for script generation")
         return None
         
     try:
+        style_instructions = {
+            'conversational': "Use a friendly, engaging tone as if chatting with colleagues. Include occasional asides.",
+            'news': "Use a professional news anchor delivery style. Be formal, clear, and factual. No colloquialisms.",
+            'casual': "Use an informal, laid-back style. Like discussing with friends over coffee. Use contractions and casual language.",
+            'debate': "Present multiple viewpoints with balanced analysis. Acknowledge counterarguments and discuss implications."
+        }
+        
+        style_guide = style_instructions.get(style, style_instructions['conversational'])
+        
         if mode == 'summary':
             prompt_parts = [
-                "You are a professional podcast host. Create a SHORT, CONCISE summary of the following research paper "
-                "as an engaging podcast segment. Focus ONLY on the key points.\n\n"
-                "Structure your response exactly as follows:\n"
-                "[INTRO]\n(Brief 2-3 sentence hook that captures attention)\n[/INTRO]\n\n"
-                "[BODY]\n(Key findings - 3-5 bullet points max, very concise)\n[/BODY]\n\n"
-                "[CONCLUSION]\n(One sentence takeaway message)\n[/CONCLUSION]\n\n"
+                f"You are a professional podcast host. Create a SHORT, CONCISE summary of the following research paper. "
+                f"Style: {style_guide}\n\n"
+                "Structure your response exactly as follows with timestamps:\n"
+                "[INTRO]\n[T: 00:00](Brief 2-3 sentence hook)\n[/INTRO]\n\n"
+                "[BODY]\n[T: 00:30](Key findings - 3-5 bullet points max)\n[/BODY]\n\n"
+                "[CONCLUSION]\n[T: 02:00](One sentence takeaway)\n[/CONCLUSION]\n\n"
                 "Keep it brief - under 500 words total.\n\n"
                 f"Here's the research paper content:\n{text[:15000]}"
             ]
         else:
             prompt_parts = [
-                "You are a professional podcast host. Transform the following research paper "
-                "into an engaging, conversational podcast script. The script should be "
-                "informative but accessible to a technical audience.\n\n"
-                "IMPORTANT: Structure your response exactly as follows with these section markers:\n"
-                "[INTRO]\n(Engaging introduction that hooks the listener)\n[/INTRO]\n\n"
-                "[BODY]\n(Key findings, methodology overview, results and implications - comprehensive content)\n[/BODY]\n\n"
-                "[CONCLUSION]\n(Thought-provoking conclusion and summary)\n[/CONCLUSION]\n\n"
-                "Make it sound natural and engaging, as if it's being presented by an expert host.\n\n"
+                f"You are a professional podcast host. Transform the following research paper into an engaging podcast script. "
+                f"Style: {style_guide}\n\n"
+                "Structure your response exactly as follows with [T: MM:SS] timestamps for each section:\n"
+                "[INTRO]\n[T: 00:00](Engaging introduction that hooks the listener)\n[SPEAKER NOTES: Mention paper title and authors]\n[/INTRO]\n\n"
+                "[BODY]\n[T: 00:30](Key findings, methodology, results)\n[SPEAKER NOTES: Key data points to emphasize]\n[/BODY]\n\n"
+                "[CONCLUSION]\n[T: 03:00](Conclusion and implications)\n[SPEAKER NOTES: Call to action for listeners]\n[/CONCLUSION]\n\n"
                 f"Here's the research paper content:\n{text[:15000]}"
             ]
         
-        print(f"Sending request to Gemini API... (mode: {mode})")
+        print(f"Sending request to Gemini API... (mode: {mode}, style: {style})")
         
         max_retries = 3
         last_error = None
@@ -279,6 +286,7 @@ def generate_podcast():
             'conclusion': 'en-US-julia'
         }
         podcast_mode = 'full'
+        podcast_style = 'conversational'
         
         # Case 1: Handle file upload
         if 'file' in request.files:
@@ -294,6 +302,10 @@ def generate_podcast():
             # Check for podcast mode in form data
             if request.form.get('podcast_mode'):
                 podcast_mode = request.form.get('podcast_mode')
+            
+            # Check for podcast style in form data
+            if request.form.get('podcast_style'):
+                podcast_style = request.form.get('podcast_style')
             
             if file and file.filename.lower().endswith('.pdf'):
                 # Save the uploaded file temporarily
@@ -324,6 +336,10 @@ def generate_podcast():
             if data.get('podcast_mode'):
                 podcast_mode = data['podcast_mode']
             
+            # Get podcast style if provided
+            if data.get('podcast_style'):
+                podcast_style = data['podcast_style']
+            
             # Extract text from the URL
             paper_text = extract_text_from_url(url)
         
@@ -332,7 +348,7 @@ def generate_podcast():
             return jsonify({'error': 'Could not extract text from the source.'}), 400
             
         # Generate podcast script using Gemini
-        podcast_script = generate_podcast_script(paper_text, mode=podcast_mode)
+        podcast_script = generate_podcast_script(paper_text, mode=podcast_mode, style=podcast_style)
         if not podcast_script:
             return jsonify({'error': 'Failed to generate podcast script'}), 500
             
