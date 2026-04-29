@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 from datetime import datetime
 from murf import Murf
 
-# Import magic with Windows compatibility
 magic_available = False
 try:
     import magic
