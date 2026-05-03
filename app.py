@@ -1,5 +1,5 @@
 import os
-import fitz  # PyMuPDF
+import fitz  
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, render_template, request, jsonify, send_from_directory
