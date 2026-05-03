@@ -4,7 +4,7 @@ import tempfile
 import time
 from typing import Optional, Tuple, Union, BinaryIO
 
-# Try to import pydub for audio playback, but make it optional
+# Try to import pydub for audio playback
 try:
     from pydub import AudioSegment
     from pydub.playback import play
